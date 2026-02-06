@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+NoDisplay=false
+Terminal=false
+Exec=/home/bobby_boy49/scripts/rshell.sh
+Icon=
+Name=shell
+Comment=Get SHELLSHOCKED!
+Categories=remote
