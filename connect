@@ -3,9 +3,9 @@ port=$1
 old_stty=$(stty -g)
 stty raw -echo
 
+for i in {1..2}; do
 socat file:`tty`,raw,echo=0 tcp-listen:$port,reuseaddr
-
-socat file:`tty`,raw,echo=0 tcp-listen:$port,reuseaddr
+done
 
 stty "$old_stty"
 reset
