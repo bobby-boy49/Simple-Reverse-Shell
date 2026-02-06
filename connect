@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# Save terminal state
+old_stty=$(stty -g)
+stty raw -echo
+
+# Loop exactly twice
+for i in {1..2}; do
+  socat file:`tty`,raw,echo=0 tcp-listen:4644,reuseaddr
+done
+
+# Restore terminal
+stty "$old_stty"
+reset
