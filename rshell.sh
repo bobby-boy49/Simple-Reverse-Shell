@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ip='192.168.1'
-port='4464'
+port='4644'
 
 shell() {
 for i in $(seq 100 255 | shuf); do
