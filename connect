@@ -5,6 +5,7 @@ stty raw -echo
 
 for i in {1..2}; do
 socat file:`tty`,raw,echo=0 tcp-listen:$port,reuseaddr
+sleep 1
 done
 
 stty "$old_stty"
