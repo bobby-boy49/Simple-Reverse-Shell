@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 port=$1
 old_stty=$(stty -g)
+rows=$(tput lines)
+cols=$(tput cols)
+echo "Current Local Window: ${rows}x${cols}"
 stty raw -echo
 
 for i in {1..2}; do
