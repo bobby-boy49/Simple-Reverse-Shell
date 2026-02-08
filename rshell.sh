@@ -18,7 +18,7 @@ if received_pass=$(timeout 0.2 bash -c "exec 3<>/dev/tcp/$com/$port; head -n 1 <
    fi
 fi
  ) &
- sleep 0.02
+ sleep 0.1
 done
 wait
 }
