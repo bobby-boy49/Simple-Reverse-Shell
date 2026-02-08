@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# Reverse Control Shell
+
 import socket
 import sys
 import os
