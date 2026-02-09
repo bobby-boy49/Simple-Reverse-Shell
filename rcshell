@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import socket, sys, os, tty, termios, select, struct, fcntl, getpass
+import socket, sys, os, tty, termios, select, struct, fcntl, getpass, base64
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4644
 TIMEOUT = 40 
@@ -32,14 +32,13 @@ def main():
     try:
         print(f"[*] Listening on {PORT}... (Timeout {TIMEOUT}s)")
         
-        # 1. Capture the Probe
         probe_conn, addr = server.accept()
         authorized_ip = addr[0]
-        
-        # Display probe acknowledgement exactly as requested
         print(f"[*] Connection 1 (Probe) acknowledged from {authorized_ip}.")
 
-        probe_conn.sendall(f"{session_pass}\n".encode())
+        # Base64 encode the password before sending
+        b64_pass = base64.b64encode(session_pass.encode()).decode()
+        probe_conn.sendall(f"{b64_pass}\n".encode())
         probe_conn.close() 
 
         server.settimeout(10)
@@ -48,11 +47,9 @@ def main():
             if addr[0] == authorized_ip: 
                 break
             else: 
-                # Alert if a ping comes from a different address than the probe
                 print(f"[!] Warning: Unauthorized ping from {addr[0]}. Dropping connection.")
                 shell_conn.close()
 
-        # 2. Display shell info exactly as requested
         rows, cols = get_term_size()
         print(f"[*] Shell established from {authorized_ip}")
         print(f"[*] Window size: {rows} rows, {cols} cols.")
